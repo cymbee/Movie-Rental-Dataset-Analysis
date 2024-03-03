@@ -1,0 +1,204 @@
+-----Concatenating some columns to get the full names of the actors' full name
+-----creating a new table that joins records from three different tables (a,b,c) to get the actors' details into the new table.
+
+create table actor_details as
+select 
+(a.first_name||' '||a.last_name) as full_name,
+c.title as film_title,
+c.description as film_description,
+c.length as length_of_the_movie
+from actor a 
+join film_actor b
+on a.actor_id=b.actor_id
+join film c
+on b.film_id=c.film_id;
+
+-----2
+-----deriving actor_details in movies that are above the duration of 1 hour
+create table length_details as
+select full_name as actors,
+film_title as movie
+from actor_details
+where length_of_the_movie > 60;--4900rows
+
+----showing actors with the number of movies they have featured in
+
+select 
+a.actor_id
+(a.first_name||' '||a.last_name) as full_name,
+count(c.film_id) movie_count
+from actor a 
+join film_actor b
+on a.actor_id=b.actor_id
+join film c
+on b.film_id=c.film_id
+group by 1,2
+order by 3 desc;
+
+/*
+Question 2.1:
+We want to find out how the two stores compare in their count of rental orders during every month for all the years we have data for. Write a query that returns the store ID for the store, the year and month and the number of rental orders each store has fulfilled for that month. Your table should include a column for each of the following: year, month, store ID and count of rental orders fulfilled during that month.
+
+Check Your Solution
+The following table header provides a preview of what your table should look like. The count of rental orders is sorted in descending order.
+
+HINT: One way to solve this query is the use of aggregations.
+
+*/
+
+
+------2.1 PROJECT WORK
+SELECT DATE_PART('MONTH',R.rental_date) AS RENTAL_MONTH,
+DATE_PART('YEAR',R.rental_date) AS RENTAL_YEAR,
+ST.store_id,
+COUNT(R.*) AS rental_count
+FROM rental R 
+JOIN store ST
+ON R.staff_id = ST.manager_staff_id
+GROUP BY 1,2,3
+ORDER BY 2,1,3; -----10 rows
+
+
+/*
+We want to understand more about the movies that families are watching. The following categories are considered family movies: Animation, Children, Classics, Comedy, Family and Music.
+
+Create a query that lists each movie, the film category it is classified in, and the number of times it has been rented out.
+*/
+----PROJECT WORK QUESTION 1.1
+---CREATION OF A CTE
+WITH T1 AS (SELECT  F.TITLE AS Film_title,
+CA.NAME Category_name,
+R.RENTAL_ID AS rental_id,
+I.inventory_id as Inventory_id,
+I.FILM_ID as film_id
+FROM FILM F
+JOIN Inventory I
+ON F.FILM_ID =I.FILM_ID
+JOIN RENTAL R
+ON I.inventory_id=R.INVENTORY_ID
+JOIN FILM_CATEGORY C
+ON I.FILM_ID=C.FILM_ID
+JOIN CATEGORY CA
+ON C.CATEGORY_ID=CA.CATEGORY_ID
+WHERE CA.NAME IN ('Animation','Children', 'Classics', 'Comedy', 'Family','Music'))
+                  
+ SELECT film_title, category_name,
+     COUNT(*) AS RENTAL_COUNT
+                  FROM T1 
+                  GROUP BY 1,2
+                  ORDER BY 2,1;---350 rows
+/*
+Question 2.2
+We would like to know who were our top 10 paying customers, how many payments they made on a monthly basis during 2007, 
+and what was the amount of the monthly payments. Can you write a query to capture the customer name, month and year of payment, 
+and total payment amount for each month by these top 10 paying customers?
+
+*/
+
+
+--TO GET THE TOP 10 PAYING CUSTOMERS
+WITH TOP_10 AS
+(SELECT
+    CONCAT(C.first_name,' ', C.last_name) AS Full_Name,
+      C.CUSTOMER_ID AS CUST_ID,
+       SUM(P.amount) AS Total_per_customer
+   FROM customer C
+    JOIN payment P
+     ON C.customer_id = P.customer_id
+      GROUP BY 1,2
+         ORDER BY 3 DESC
+            LIMIT 10)
+
+--Payment per month
+SELECT DATE_TRUNC('MONTH',P.payment_date) AS Payment_Month,
+T.FULL_NAME,
+COUNT(P.*)  AS PAYMENT_COUNT,
+SUM(P.amount)  AS PAYMENT_AMT
+FROM payment P 
+JOIN top_10 T
+ON P.customer_id=T.CUST_ID
+GROUP BY 1,2
+ORDER BY 2,1;-----34rows
+
+
+/*
+Question 3
+Finally, for each of these top 10 paying customers, I would like to find out the difference across their monthly 
+payments during 2007. Please go ahead and write a query to compare the payment amounts in each successive month. 
+Repeat this for each of these 10 paying customers. Also, it will be tremendously helpful if you can identify the 
+customer name who paid the most difference in terms of payments.
+
+*/
+
+--TO GET THE TOP 10 PAYING CUSTOMERS
+WITH TOP_10 AS
+(SELECT
+    CONCAT(C.first_name,' ', C.last_name) AS Full_Name,
+      C.CUSTOMER_ID AS CUST_ID,
+       SUM(P.amount) AS Total_per_customer
+   FROM customer C
+    JOIN payment P
+     ON C.customer_id = P.customer_id
+      GROUP BY 1,2
+         ORDER BY 3 DESC
+            LIMIT 10)
+
+--Monthly Payment Difference
+Select *,
+   coalesce(LAG (PAYMENT_AMT) OVER Payment_Difference,0),
+    PAYMENT_AMT - coalesce(LAG (PAYMENT_AMT) OVER Payment_Difference,0) AS Monthly_Payment_Difference
+  FROM
+    (SELECT DATE_TRUNC('MONTH',P.payment_date) AS Payment_Month,
+             T.FULL_NAME as Customer_Name,
+               COUNT(P.*)  AS PAYMENT_COUNT,
+                 SUM(P.amount)  AS PAYMENT_AMT
+         FROM payment P 
+           JOIN top_10 T
+            ON P.customer_id=T.CUST_ID
+        GROUP BY 1,2
+       ORDER BY 2,1)m
+
+   WINDOW Payment_Difference AS 
+          (PARTITION BY CUSTOMER_NAME ORDER BY PAYMENT_MONTH);---34rows
+
+---ORDER BY PAYMENT_MONTH
+
+
+--TO GET THE TOP 10 PAYING CUSTOMERS
+WITH TOP_10 AS
+(SELECT
+    CONCAT(C.first_name,' ', C.last_name) AS Full_Name,
+      C.CUSTOMER_ID AS CUST_ID,
+       SUM(P.amount) AS Total_per_customer
+   FROM customer C
+    JOIN payment P
+     ON C.customer_id = P.customer_id
+      GROUP BY 1,2
+         ORDER BY 3 DESC
+            LIMIT 10),
+------Table showing the different 			
+  PAYMENT_DIFFERENCE AS	
+                     (Select *,
+                        coalesce(LAG (PAYMENT_AMT) OVER Payment_Difference,0),
+                         PAYMENT_AMT -coalesce(LAG (PAYMENT_AMT) OVER Payment_Difference,0) AS Monthly_Payment_Difference
+                        FROM
+                           (SELECT DATE_TRUNC('MONTH',P.payment_date) AS Payment_Month,
+                                  T.FULL_NAME as Customer_Name,
+                                    COUNT(P.*)  AS PAYMENT_COUNT,
+                                       SUM(P.amount)  AS PAYMENT_AMT
+                               FROM payment P 
+                                JOIN top_10 T
+                                 ON P.customer_id=T.CUST_ID
+                                  GROUP BY 1,2
+                              ORDER BY 2,1)S
+
+   WINDOW Payment_Difference AS 
+          (PARTITION BY CUSTOMER_NAME ORDER BY PAYMENT_MONTH))
+----Max difference and customer	name	  
+select Max(M.Monthly_Payment_Difference),M.customer_name
+   FROM PAYMENT_DIFFERENCE M
+    GROUP BY 2
+  ORDER BY 1 DESC
+ LIMIT 1;-----1 row
+
+---ORDER BY PAYMENT_MONTH
